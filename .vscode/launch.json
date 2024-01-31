@@ -19,6 +19,9 @@
             "program":"${workspaceFolder}/tests/rerun_issue_direct.py",
             "console":"integratedTerminal",
             "justMyCode":true,
+            "args": [
+                "https://github.com/wwzeng1/landing-page/issues/114"
+            ]
         },
         {
             "name": "FastAPI",

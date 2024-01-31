@@ -6,7 +6,7 @@ from loguru import logger
 
 logger.print = logger.info
 
-load_dotenv(dotenv_path=".env")
+load_dotenv(dotenv_path=".env", override=True)
 
 os.environ["GITHUB_APP_PEM"] = os.environ.get("GITHUB_APP_PEM") or base64.b64decode(
     os.environ.get("GITHUB_APP_PEM_BASE64", "")
@@ -195,7 +195,7 @@ if WHITELISTED_USERS:
     WHITELISTED_USERS = WHITELISTED_USERS.split(",")
     WHITELISTED_USERS.append(GITHUB_BOT_USERNAME)
 
-DEFAULT_GPT4_32K_MODEL = os.environ.get("DEFAULT_GPT4_32K_MODEL", "gpt-4-1106-preview")
+DEFAULT_GPT4_32K_MODEL = os.environ.get("DEFAULT_GPT4_32K_MODEL", "gpt-4-0125-preview")
 DEFAULT_GPT35_MODEL = os.environ.get("DEFAULT_GPT35_MODEL", "gpt-3.5-turbo-1106")
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", None)
