@@ -1,41 +1,19 @@
 import { Snippet } from "../../lib/search";
 
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "../ui/resizable";
-import { Textarea } from "../ui/textarea";
-import React, { useCallback, useEffect, useState } from "react";
-import FileSelector, { getLanguage } from "../shared/FileSelector";
-import DashboardActions from "./DashboardActions";
-import CodeMirror, {
-  EditorView,
-  gutter,
-  lineNumbers,
-} from "@uiw/react-codemirror";
+import React, { useEffect, useState } from "react";
+import { getLanguage } from "./FileSelector";
+import CodeMirror, { EditorView, lineNumbers } from "@uiw/react-codemirror";
 import { useLocalStorage } from "usehooks-ts";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { Skeleton } from "../ui/skeleton";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 
-// const debounce = (func: (...args: any[]) => void, delay: number): (() => void) => {
-//     let debounceTimer: NodeJS.Timeout;
-//     return function(this: any, ...args: any[]) {
-//         clearTimeout(debounceTimer);
-//         debounceTimer = setTimeout(() => func.apply(this, args), delay);
-//     };
-// }
-
 const DashboardContext = () => {
-  const [oldFile, setOldFile] = useLocalStorage("oldFile", "");
-  const [hideMerge, setHideMerge] = useLocalStorage("hideMerge", true);
   const [branch, setBranch] = useLocalStorage("branch", "");
-  const [filePath, setFilePath] = useLocalStorage("filePath", "");
-  const [scriptOutput, setScriptOutput] = useLocalStorage("scriptOutput", "");
-  const [file, setFile] = useLocalStorage("file", "");
-  const [searchedSnippets, setSearchedSnippets] = useState([] as Snippet[]);
+  const [searchedSnippets = [], setSearchedSnippets] = useState(
+    [] as Snippet[],
+  );
   const [searchIsLoading, setSearchIsLoading] = useState(false);
   const [repoName, setRepoName] = useLocalStorage("repoName", "");
   const [query, setQuery] = useState("");

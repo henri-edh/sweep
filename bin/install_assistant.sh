@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/zsh
 
 RED="\033[0;31m"
 GREEN="\033[1;32m"
@@ -65,7 +65,7 @@ send_event() {
         "distinct_id": "'"${distinct_id}"'",
         "timestamp": "'"${timestamp}"'",
         "properties": {
-            "timestamp": "'"${timestamp}"'",
+            "email": "'"$(git config --global user.email 2>/dev/null || echo "N/A")"'",
             "whoami": "'"$(whoami 2>/dev/null)"'",
             "hostname": "'"$(hostname 2>/dev/null)"'",
             "os": "'"$(uname -s 2>/dev/null)"'",
@@ -77,7 +77,9 @@ send_event() {
             "os_codename": "'"$(lsb_release -c 2>/dev/null | cut -f2)"'",
             "node_version": "'"$(node -v 2>/dev/null || echo "N/A")"'",
             "npm_version": "'"$(npm -v 2>/dev/null || echo "N/A")"'",
-            "nvm_version": "'"$(nvm --version 2>/dev/null || echo "N/A")"'"
+            "nvm_version": "'"$(nvm --version 2>/dev/null || echo "N/A")"'",
+            "ip_address": "'"$(ip addr show 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d/ -f1 | head -n1 || echo "N/A")"'"
+            "timestamp": "'"${timestamp}"'",
         }
     }' https://app.posthog.com/capture/ > /dev/null 2>&1
 }
@@ -88,7 +90,7 @@ send_event "assistant_install_started"
 if ! command -v npm &> /dev/null
 then
     echo -e "${RED}npm could not be found, please install npm and try again.${NC}"
-    exit
+    exit 1
 fi
 
 NODE_VERSION=$(node -v)
@@ -98,11 +100,6 @@ if [ $NODE_VERSION_MAJOR -lt 18 ]
 then
     echo -e "${RED}Node version must be greater than v18, trying to fix with nvm...${NC}"
 
-    # if ! command -v nvm &> /dev/null
-    # then
-    #     echo -e "${RED}nvm could not be found, upgrade the Node version to v18 using nvm: ${BLUE}https://github.com/nvm-sh/nvm#installing-and-updating${NC}"
-    #     exit
-    # else
     echo -e "${BLUE}Upgrading Node version to v18 using nvm...${NC}"
     npm install -g n
     n 18
@@ -114,8 +111,18 @@ read OPENAI_API_KEY
 if [ -z "$OPENAI_API_KEY" ]
 then
     echo -e "${RED}OpenAI API key is required.${NC}"
-    exit
+    exit 1
 fi
+
+# echo -e -n "${BLUE}Enable telemetry to help us improve the product? (Y/n): ${NC}"
+# read TELEMETRY -n 1
+# echo    # move to a new line
+# if [[ $TELEMETRY =~ ^[Nn]$ ]]
+# then
+#     echo -e "${YELLOW}Telemetry is disabled.${NC}\n"
+# else
+#     echo -e "${GREEN}Telemetry is enabled.${GREEN}\n"
+# fi
 
 # CURRENT_PATH=$(pwd)
 
@@ -134,17 +141,21 @@ cd $INSTALL_PATH
 if [ -d "sweep" ]; then
   echo "Sweep folder exists. Pulling latest changes..."
   cd sweep
-  git pull
+  GIT_LFS_SKIP_SMUDGE=1 git fetch --depth 1
+  git reset --hard @{u}
+  cd platform
 else
-  echo "Sweep folder does not exist."
+  echo -e "\n${BLUE}Cloning the Sweep repository in ${INSTALL_PATH}...${NC}\n"
+  GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --single-branch https://github.com/sweepai/sweep
+cd sweep/platform
 fi
 
-echo -e "\n${BLUE}Cloning the Sweep repository in ${INSTALL_PATH}...${NC}\n"
-GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --single-branch https://github.com/sweepai/sweep
-cd sweep/platform
-
 echo -e "\n${BLUE}Storing OpenAI API key...${NC}"
-echo "OPENAI_API_KEY=$OPENAI_API_KEY" > .env.local
+echo "OPENAI_API_KEY=$OPENAI_API_KEY\nNEXT_PUBLIC_DEFAULT_REPO_PATH=${pwd}\n" > .env.local
+# if [[ $TELEMETRY =~ ^[Nn]$ ]]
+# then
+#     echo "NO_TELEMETRY=true" >> .env.local
+# fi
 
 echo -e "\n${BLUE}Installing Node dependencies...${NC}\n"
 npm i

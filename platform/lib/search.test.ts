@@ -1,12 +1,13 @@
 import { listFiles, searchFiles, splitIntoChunks } from "./search";
+import { expect } from "@jest/globals";
 
 describe("splitIntoChunks", () => {
   test("splits string into chunks of 40 lines with 30 lines overlapping", () => {
     const input = Array(100).fill("Line").join("\n");
     const result = splitIntoChunks(input);
-    expect(result[0].content.split("\n").length).toBe(40);
-    expect(result[1].content.split("\n").length).toBe(40);
-    expect(result[1].content.split("\n")[0]).toBe("Line");
+    expect(result[0].content.split("\n")).toHaveLength(40);
+    expect(result[1].content.split("\n")).toHaveLength(40);
+    expect(result[1].content.split("\n")[0]).toEqual("Line");
   });
 
   test("handles empty string", () => {
@@ -29,10 +30,7 @@ describe("splitIntoChunks", () => {
 
 it("fetches all the files", async () => {
   const files = await listFiles("./");
-  // for (const file of files) {
-  //     console.log(file.name, file.path, file.content?.length)
-  // }
-  expect(files.length > 0);
+  expect(files.length).toBeGreaterThan(0);
 });
 
 it("searched for something", async () => {
@@ -40,5 +38,5 @@ it("searched for something", async () => {
   for (const snippet of snippets) {
     console.log(snippet.file, snippet.content);
   }
-  expect(snippets.length > 0);
+  expect(snippets.length).toBeGreaterThan(0);
 });

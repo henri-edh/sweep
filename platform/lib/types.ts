@@ -21,6 +21,27 @@ interface FileChangeRequest {
   changeType: "create" | "modify";
   hideMerge: boolean;
   isLoading: boolean;
+  readOnlySnippets: { [key: string]: Snippet };
+  diff: string;
+  status: "queued" | "in-progress" | "done" | "error" | "idle";
 }
 
-export type { File, Snippet, FileChangeRequest };
+const fcrEqual = (a: FileChangeRequest, b: FileChangeRequest) => {
+  return (
+    a.snippet.file === b.snippet.file &&
+    a.snippet.start === b.snippet.start &&
+    a.snippet.end === b.snippet.end
+  );
+};
+
+const snippetKey = (snippet: Snippet) => {
+  return `${snippet.file}:${snippet.start || 0}-${snippet.end || 0}`;
+};
+
+interface Message {
+  role: "user" | "system" | "assistant";
+  content: string;
+}
+
+export { fcrEqual, snippetKey };
+export type { File, Snippet, FileChangeRequest, Message };

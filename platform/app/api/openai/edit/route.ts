@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { OpenAIStream, StreamingTextResponse } from "ai";
 import { Snippet } from "../../../../lib/search";
+import { Message } from "../../../../lib/types";
+import { ChatCompletionMessageParam } from "openai/resources/chat/completions.mjs";
 
 interface Body {
   fileContents: string;
   prompt: string;
   snippets: Snippet[];
+  userMessage: string;
+  additionalMessages?: Message[];
+  systemMessagePrompt?: string;
 }
 
 const openai = new OpenAI({
@@ -33,25 +38,6 @@ The new code block to replace the second code block. Ensure the indentation and 
 
 You may write one or multiple diff hunks. The MODIFIED can be empty.`;
 
-const userMessagePrompt = `Here are relevant read-only files:
-<read_only_files>
-{readOnlyFiles}
-</read_only_files>
-
-Here are the file's current contents:
-<file_contents>
-{fileContents}
-</file_contents>
-
-Your job is to modify the current code file in order to complete the user's request:
-<user_request>
-{prompt}
-</user_request>`;
-
-const readOnlyFileFormat = `<read_only_file file="{file}" start_line="{start_line}" end_line="{end_line}">
-{contents}
-<file_contents>`;
-
 export async function POST(request: NextRequest) {
   if (openai.apiKey === "") {
     const response = NextResponse.json(
@@ -65,42 +51,17 @@ export async function POST(request: NextRequest) {
   }
   const body = (await request.json()) as Body;
 
-  if (
-    body.snippets.map((snippet) => snippet.content).join("").length >
-    128000 * 3
-  ) {
-    const response = NextResponse.json(
-      {
-        message:
-          "Input is too large, ran out of tokens, remove some read-only files.",
-      },
-      { status: 400 },
-    );
-    return response;
-  }
+  const messages: ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: body.systemMessagePrompt || systemMessagePrompt,
+    },
+    ...(body.additionalMessages || []),
+    { role: "user", content: body.userMessage },
+  ];
 
   const params: OpenAI.Chat.ChatCompletionCreateParams = {
-    messages: [
-      { role: "system", content: systemMessagePrompt },
-      {
-        role: "user",
-        content: userMessagePrompt
-          .replace("{prompt}", body.prompt)
-          .replace("{fileContents}", body.fileContents)
-          .replace(
-            "{readOnlyFiles}",
-            body.snippets
-              .map((snippet) =>
-                readOnlyFileFormat
-                  .replace("{file}", snippet.file)
-                  .replace("{start_line}", snippet.start.toString())
-                  .replace("{end_line}", snippet.end.toString())
-                  .replace("{contents}", snippet.content),
-              )
-              .join("\n"),
-          ),
-      },
-    ],
+    messages,
     model: "gpt-4-1106-preview",
     stream: true,
   };
