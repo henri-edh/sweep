@@ -2,18 +2,54 @@ import difflib
 import re
 
 from loguru import logger
+from sweepai.dataclasses.comments import CommentDiffSpan
 from sweepai.utils.search_and_replace import Match, find_best_match
 
 
-def generate_diff(old_code, new_code):
+def generate_diff(old_code, new_code, **kwargs):
+    if old_code == new_code:
+        return ""
+    stripped_old_code = old_code.strip("\n")
+    stripped_new_code = new_code.strip("\n")
+
+    # Split the code into lines, preserving the line endings
+    old_lines = old_code.splitlines(keepends=True)
+    new_lines = new_code.splitlines(keepends=True)
+
+    # Add a newline character at the end if it's missing
+    if not old_code.endswith("\n"):
+        old_lines.append("\n")
+    if not new_code.endswith("\n"):
+        new_lines.append("\n")
+
+    default_kwargs = {"n": 5}
+    default_kwargs.update(kwargs)
+
+    diff = difflib.unified_diff(
+        stripped_old_code.splitlines(keepends=True),
+        stripped_new_code.splitlines(keepends=True),
+        **kwargs
+    )
+
+    diff_result = ""
+
+    for line in diff:
+        if not line.endswith("\n"):
+            line += "\n"
+        diff_result += line
+
+    return diff_result
+
+def generate_ndiff(old_code, new_code, **kwargs):
     if old_code == new_code:
         return ""
     stripped_old_code = old_code.strip()
     stripped_new_code = new_code.strip()
 
-    diff = difflib.unified_diff(
+    diff = difflib.ndiff(
         stripped_old_code.splitlines(keepends=True),
         stripped_new_code.splitlines(keepends=True),
+        **kwargs
     )
 
     diff_text = "".join(diff)
@@ -207,21 +243,6 @@ def get_matches(modify_file_response):
     )
     return matches
 
-
-def join_contents_k(first, second, k):
-    """
-    Join contents together removing k duplicate lines
-    """
-    first_lines = first.split("\n")
-    second_lines = second.split("\n")
-    for i in range(k, 0, -1):
-        if len(first_lines) < k or len(second_lines) < k:
-            continue
-        if first_lines[-i:] == second_lines[:i]:
-            return "\n".join(first_lines) + "\n" + "\n".join(second_lines[i:])
-    return "\n".join(first_lines) + "\n" + "\n".join(second_lines)
-
-
 def is_markdown(filename):
     return (
         filename.endswith(".md")
@@ -229,6 +250,74 @@ def is_markdown(filename):
         or filename.endswith(".txt")
     )
 
+def get_diff_spans(old_content: str, new_content: str, file_name: str) -> list[CommentDiffSpan]:
+    # Split the contents into lines
+    old_lines = old_content.splitlines()
+    new_lines = new_content.splitlines()
+
+    # Create a differ object
+    differ = difflib.Differ()
+
+    # Generate the diff
+    diff = list(differ.compare(old_lines, new_lines))
+
+    # Initialize variables
+    old_end_line = 0
+    new_end_line = 0
+    old_start_line = None
+    new_start_line = None
+    new_code = []
+    diff_spans = []
+
+    # Iterate through the diff lines
+    for line in diff:
+        if line.startswith("  "):
+            # Unchanged line
+            old_end_line += 1
+            new_end_line += 1
+            if old_start_line is not None:
+                # End of a diff span
+                diff_spans.append(
+                    CommentDiffSpan(
+                        old_start_line=old_start_line, 
+                        old_end_line=old_end_line,
+                        new_start_line=new_start_line,
+                        new_end_line=new_end_line,
+                        new_code="\n".join(new_code),
+                        file_name=file_name
+                    )
+                )
+                old_start_line = None
+                new_start_line = None
+                new_code = []
+        elif line.startswith("+ "):
+            # Added line
+            new_end_line += 1
+            if old_start_line is None:
+                old_start_line = old_end_line
+                new_start_line = new_end_line
+            if line.strip():
+                new_code.append(line[2:])
+        elif line.startswith("- "):
+            # Removed line
+            old_end_line += 1
+            if old_start_line is None:
+                old_start_line = old_end_line
+                new_start_line = new_end_line
+    # Handle the last diff span
+    if old_start_line is not None:
+        diff_spans.append(
+            CommentDiffSpan(
+                old_start_line=old_start_line, 
+                old_end_line=old_end_line,
+                new_start_line=new_start_line,
+                new_end_line=new_end_line,
+                new_code="\n".join(new_code),
+                file_name=file_name
+            )
+        )
+
+    return diff_spans
 
 if __name__ == "__main__":
     old_file = """\

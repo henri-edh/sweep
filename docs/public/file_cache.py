@@ -57,9 +57,10 @@ def file_cache(ignore_params=[], verbose=False):
             if verbose:
                 print("Cache is disabled for function: " + func.__name__)
             return func
+        func_source_code_hash = hash_code(inspect.getsource(func))
 
         def wrapper(*args, **kwargs):
-            cache_dir = "/tmp/file_cache"
+            cache_dir = "/mnt/caches/file_cache"
             os.makedirs(cache_dir, exist_ok=True)
 
             # Convert args to a dictionary based on the function's signature
@@ -76,7 +77,7 @@ def file_cache(ignore_params=[], verbose=False):
             arg_hash = (
                 recursive_hash(args_dict, ignore_params=ignore_params)
                 + recursive_hash(kwargs_clone, ignore_params=ignore_params)
-                + hash_code(inspect.getsource(func))
+                + func_source_code_hash
             )
             cache_file = os.path.join(
                 cache_dir, f"{func.__module__}_{func.__name__}_{arg_hash}.pickle"

@@ -28,6 +28,7 @@ app = typer.Typer(
 )
 app_dir = typer.get_app_dir("sweepai")
 config_path = os.path.join(app_dir, "config.json")
+os.environ["CLI"] = "True"
 
 console = Console()
 cprint = console.print
@@ -44,9 +45,18 @@ def load_config():
         cprint(f"\nLoading configuration from {config_path}", style="yellow")
         with open(config_path, "r") as f:
             config = json.load(f)
-        os.environ["GITHUB_PAT"] = config.get("GITHUB_PAT", "")
-        os.environ["OPENAI_API_KEY"] = config.get("OPENAI_API_KEY", "")
-        os.environ["POSTHOG_DISTINCT_ID"] = str(config.get("POSTHOG_DISTINCT_ID", ""))
+        for key, value in config.items():
+            try:
+                os.environ[key] = value
+            except Exception as e:
+                cprint(f"Error loading config: {e}, skipping.", style="yellow")
+        os.environ["POSTHOG_DISTINCT_ID"] = str(os.environ.get("POSTHOG_DISTINCT_ID", ""))
+        # Should contain:
+        # GITHUB_PAT
+        # OPENAI_API_KEY
+        # ANTHROPIC_API_KEY
+        # VOYAGE_API_KEY
+        # POSTHOG_DISTINCT_ID
 
 
 def fetch_issue_request(issue_url: str, __version__: str = "0"):
@@ -117,6 +127,9 @@ def get_event_type(event: Event | IssueEvent):
     else:
         return pascal_to_snake(event.type)[: -len("_event")]
 
+@app.command()
+def test():
+    cprint("Sweep AI is installed correctly and ready to go!", style="yellow")
 
 @app.command()
 def watch(
@@ -231,29 +244,49 @@ def watch(
 
 @app.command()
 def init(override: bool = False):
-    if os.path.exists(config_path) and not override:
-        override = typer.confirm(
-            f"\nConfiguration already exists at {config_path}. Override?",
-            default=False,
-            abort=True,
-        )
+    # TODO: Fix telemetry
+    if not override:
+        if os.path.exists(config_path):
+            with open(config_path, "r") as f:
+                config = json.load(f)
+                if "OPENAI_API_KEY" in config and "ANTHROPIC_API_KEY" in config and "GITHUB_PAT" in config:
+                    override = typer.confirm(
+                        f"\nConfiguration already exists at {config_path}. Override?",
+                        default=False,
+                        abort=True,
+                    )
     cprint(
         "\n[bold black on white]  Initializing Sweep CLI...  [/bold black on white]\n",
     )
     cprint(
-        "Firstly, we'll need your OpenAI API Key. You can get it here: https://platform.openai.com/api-keys\n",
+        "\nFirstly, let's store your OpenAI API Key. You can get it here: https://platform.openai.com/api-keys\n",
         style="yellow",
     )
     openai_api_key = Prompt.ask("OpenAI API Key", password=True)
     assert len(openai_api_key) > 30, "OpenAI API Key must be of length at least 30."
     assert openai_api_key.startswith("sk-"), "OpenAI API Key must start with 'sk-'."
     cprint(
-        "\nGreat! Next, we'll need your GitHub PAT. Here's a link with all the permissions pre-filled:\nhttps://github.com/settings/tokens/new?description=Sweep%20Self-hosted&scopes=repo,workflow\n",
+        "\nNext, let's store your Anthropic API key. You can get it here: https://console.anthropic.com/settings/keys.",
+        style="yellow",
+    )
+    anthropic_api_key = Prompt.ask("Anthropic API Key", password=True)
+    assert len(anthropic_api_key) > 30, "Anthropic API Key must be of length at least 30."
+    assert anthropic_api_key.startswith("sk-ant-api03-"), "GitHub PAT must start with 'ghp_'."
+    cprint(
+        "\nGreat! Next, we'll need just your GitHub PAT. Here's a link with all the permissions pre-filled:\nhttps://github.com/settings/tokens/new?description=Sweep%20Self-hosted&scopes=repo,workflow\n",
         style="yellow",
     )
     github_pat = Prompt.ask("GitHub PAT", password=True)
     assert len(github_pat) > 30, "GitHub PAT must be of length at least 30."
     assert github_pat.startswith("ghp_"), "GitHub PAT must start with 'ghp_'."
+    cprint(
+        "\nAwesome! Lastly, let's get your Voyage AI API key from https://dash.voyageai.com/api-keys. This is optional, but improves code search by about [cyan]3%[/cyan]. You can always return to this later by re-running 'sweep init'.",
+        style="yellow",
+    )
+    voyage_api_key = Prompt.ask("Voyage AI API key", password=True)
+    if voyage_api_key:
+        assert len(voyage_api_key) > 30, "Voyage AI API key must be of length at least 30."
+        assert voyage_api_key.startswith("pa-"), "Voyage API key must start with 'pa-'."
 
     POSTHOG_DISTINCT_ID = None
     enable_telemetry = typer.confirm(
@@ -265,23 +298,14 @@ def init(override: bool = False):
             "\nThank you for enabling telemetry. We'll collect anonymous usage statistics to improve the product. You can disable this at any time by rerunning 'sweep init'.",
             style="yellow",
         )
-        # distinct_id_call = subprocess.run(
-        #     "echo $(whoami 2>/dev/null)@$(hostname 2>/dev/null)",
-        #     shell=True,
-        #     text=True,
-        #     capture_output=True,
-        # )
-        # POSTHOG_DISTINCT_ID = (
-        #     distinct_id_call.stdout.strip()
-        #     if distinct_id_call.returncode == 0
-        #     else uuid.getnode()
-        # )
-        POSTHOG_DISTINCT_ID = uuid.getnode()
+        POSTHOG_DISTINCT_ID = str(uuid.getnode())
         posthog.capture(POSTHOG_DISTINCT_ID, "sweep_init", {})
 
     config = {
         "GITHUB_PAT": github_pat,
         "OPENAI_API_KEY": openai_api_key,
+        "ANTHROPIC_API_KEY": anthropic_api_key,
+        "VOYAGE_API_KEY": voyage_api_key,
     }
     if POSTHOG_DISTINCT_ID:
         config["POSTHOG_DISTINCT_ID"] = POSTHOG_DISTINCT_ID
@@ -317,11 +341,11 @@ def run(issue_url: str):
     try:
         cprint(f'\nRunning Sweep to solve "{request.issue.title}"!\n')
         on_ticket(
+            username=request.sender.login,
             title=request.issue.title,
             summary=request.issue.body,
             issue_number=request.issue.number,
             issue_url=request.issue.html_url,
-            username=request.sender.login,
             repo_full_name=request.repository.full_name,
             repo_description=request.repository.description,
             installation_id=request.installation.id,
@@ -337,7 +361,7 @@ def run(issue_url: str):
 
 def main():
     cprint(
-        "By using the Sweep CLI, you agree to the Sweep AI Terms of Service at https://sweep.dev/tos.pdf.",
+        "By using the Sweep CLI, you agree to the Sweep AI Terms of Service at https://sweep.dev/tos.pdf",
         style="cyan",
     )
     load_config()

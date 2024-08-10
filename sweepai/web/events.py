@@ -4,11 +4,11 @@ from pydantic import BaseModel
 
 
 class Changes(BaseModel):
-    body: Dict[str, str]
+    body: Dict[str, str] | None = None
 
     @property
     def body_from(self):
-        return self.body.get("from")
+        return self.body.get("from") if self.body else None
 
 
 class Account(BaseModel):
@@ -32,7 +32,7 @@ class PREdited(BaseModel):
 
         html_url: str
         title: str
-        body: str
+        body: str | None
         number: int
 
         user: User
@@ -162,7 +162,33 @@ class PRRequest(BaseModel):
         class User(BaseModel):
             login: str
 
+        class MergedBy(BaseModel):
+            login: str
+
+        user: User
         title: str
+        merged_by: MergedBy | None
+        additions: int = 0
+        deletions: int = 0
+
+    class Repository(BaseModel):
+        full_name: str
+
+    pull_request: PullRequest
+    repository: Repository
+    number: int
+
+    installation: Installation
+
+class PRLabeledRequest(BaseModel):
+    class PullRequest(BaseModel):
+        class User(BaseModel):
+            login: str
+        class Label(BaseModel):
+            name: str
+
+        title: str
+        labels: list[Label]
 
         class MergedBy(BaseModel):
             login: str
